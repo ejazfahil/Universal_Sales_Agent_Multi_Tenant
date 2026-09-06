@@ -11,6 +11,25 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: usa_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      TEST_DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/usa_test
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/usa_test
+
     steps:
       - uses: actions/checkout@v4
 
@@ -33,8 +52,27 @@ jobs:
       - name: Type check
         run: uv run mypy --strict app/
 
+      - name: Migrations up / down / up  (proves downgrade is not decorative)
+        run: |
+          uv run alembic upgrade head
+          uv run alembic downgrade base
+          uv run alembic upgrade head
+
       - name: Tests
         run: uv run pytest -q
+
+      # The isolation acceptance criterion must actually run, never silently
+      # skip. Integration tests self-skip when no database is reachable, so
+      # assert here that they executed.
+      - name: Assert isolation tests were NOT skipped
+        run: |
+          OUT=$(uv run pytest tests/integration -q --no-header -rs 2>&1)
+          echo "$OUT"
+          if echo "$OUT" | grep -qi "no PostgreSQL reachable"; then
+            echo "::error::Integration tests skipped — invariant I2 was never verified"
+            exit 1
+          fi
+          echo "$OUT" | grep -qE '[0-9]+ passed' || { echo "::error::no tests passed"; exit 1; }
 
       # Invariant I6: no emotion or sentiment inference in the EU path.
       - name: Guard — no sentiment inference
