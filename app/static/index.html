@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Approval Queue — Universal Sales Agent</title>
+<link rel="stylesheet" href="/static/tokens.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--tx);font-family:var(--font-body);font-size:14px;line-height:1.5}
+.shell{display:grid;grid-template-columns:var(--sidebar-w) 1fr;min-height:100vh}
+@media(max-width:900px){.shell{grid-template-columns:1fr}.sidebar{display:none}}
+.sidebar{background:var(--sf);border-right:1px solid var(--bd);padding:20px 16px;display:flex;flex-direction:column;gap:24px}
+.brand{display:flex;align-items:center;gap:10px}
+.brand-mark{width:30px;height:30px;border-radius:8px;background:var(--orange);color:#fff;display:grid;place-items:center;font-weight:700}
+.brand h1{font-family:var(--font-display);font-size:15px;font-weight:700}
+.brand small{color:var(--tx3);font-size:11px}
+.nav-label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--tx3);margin-bottom:8px}
+.nav a{display:block;padding:8px 10px;border-radius:8px;color:var(--tx2);text-decoration:none;font-weight:500}
+.nav a.active{background:var(--orange-m);color:var(--orange)}
+.guarantee{margin-top:auto;background:var(--orange-s);border:1px solid var(--bd);border-radius:10px;padding:12px}
+.guarantee b{display:block;font-size:12px;margin-bottom:4px}
+.guarantee p{font-size:11px;color:var(--tx2)}
+.main{display:flex;flex-direction:column;min-width:0}
+.topbar{height:var(--topbar-h);background:var(--topbar-blur);backdrop-filter:blur(16px);border-bottom:1px solid var(--bd);display:flex;align-items:center;padding:0 24px;gap:12px;position:sticky;top:0;z-index:10}
+.topbar h2{font-family:var(--font-display);font-size:15px;font-weight:700}
+.pill{margin-left:auto;font-size:12px;color:var(--tx3);border:1px solid var(--bd);border-radius:8px;padding:5px 11px;background:var(--sf)}
+.pill.ok{color:var(--green);border-color:var(--green-m);background:var(--green-m)}
+.content{padding:24px;display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:20px;align-items:start}
+@media(max-width:1100px){.content{grid-template-columns:1fr}}
+.card{background:var(--sf);border:1px solid var(--bd);border-radius:12px;box-shadow:var(--card-shadow);overflow:hidden}
+.card-h{padding:14px 16px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:10px}
+.card-h h3{font-size:13px;font-weight:600}
+.card-b{padding:16px}
+.msg{background:var(--el);border-radius:10px;padding:12px 14px;margin-bottom:12px}
+.msg.out{background:var(--orange-m)}
+.msg .who{font-size:11px;color:var(--tx3);margin-bottom:4px}
+.disclosure{border-left:3px solid var(--blue);background:var(--blue-s);padding:10px 12px;border-radius:0 8px 8px 0;font-size:12px;color:var(--tx2);margin-bottom:12px}
+.trace{font-family:var(--font-mono);font-size:12px}
+.step{padding:10px 0;border-bottom:1px dashed var(--bd)}
+.step:last-child{border-bottom:0}
+.kind{display:inline-block;font-size:10px;font-weight:600;letter-spacing:.05em;padding:2px 6px;border-radius:4px;margin-bottom:5px}
+.kind.TOOL{color:var(--blue);background:var(--blue-m)}
+.kind.POLICY{color:var(--violet);background:var(--violet-m)}
+.kind.RECOMMENDATION{color:var(--orange);background:var(--orange-m)}
+.kind.THINKING{color:var(--tx3);background:var(--el)}
+.step .res{color:var(--tx2);margin-top:4px}
+.sig{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--bd);font-size:12px}
+.sig:last-child{border-bottom:0}
+.bar{height:5px;border-radius:3px;background:var(--bar-muted);overflow:hidden;width:110px;align-self:center}
+.bar span{display:block;height:100%;background:var(--green)}
+.bar.weak span{background:var(--red)}
+.warn{background:var(--yellow-m);border:1px solid var(--bd);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--tx2);margin-top:12px}
+.warn b{color:var(--yellow)}
+.actions{display:flex;gap:8px;padding:14px 16px;border-top:1px solid var(--bd);flex-wrap:wrap}
+button{font:inherit;font-weight:600;font-size:13px;border-radius:8px;padding:9px 15px;border:1px solid var(--bd);background:var(--sf);color:var(--tx);cursor:pointer}
+button:hover{border-color:var(--bdh)}
+button.primary{background:var(--orange);border-color:var(--orange);color:#fff}
+button.primary:hover{background:var(--orange-h)}
+button.danger{color:var(--red)}
+button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+kbd{font-family:var(--font-mono);font-size:10px;background:rgba(255,255,255,.25);border-radius:3px;padding:1px 4px;margin-left:6px}
+.gate{font-size:12px;color:var(--tx2);padding:12px 16px;background:var(--el);border-radius:8px;margin:0 16px 16px}
+.gate b{color:var(--tx)}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--tx);color:#fff;padding:11px 18px;border-radius:10px;font-size:13px;display:flex;gap:14px;align-items:center;transition:transform .25s cubic-bezier(.16,1,.3,1);z-index:50}
+.toast.show{transform:translateX(-50%) translateY(0)}
+.toast button{background:transparent;border:0;color:var(--orange);padding:0;font-size:13px}
+.empty{padding:44px 16px;text-align:center;color:var(--tx3)}
+.stat{display:flex;justify-content:space-between;font-size:12px;padding:6px 0}
+.stat b{font-family:var(--font-mono)}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">U</div>
+      <div><h1>Universal</h1><small>Sales Agent</small></div>
+    </div>
+    <nav class="nav">
+      <div class="nav-label">Inbox</div>
+      <a href="#" class="active" aria-current="page">Approval queue</a>
+      <a href="/docs">API reference</a>
+      <a href="/health">Health &amp; residency</a>
+    </nav>
+    <div class="guarantee">
+      <b>🇪🇺 EEA guarantee</b>
+      <p>Customer names, emails and order references are replaced with opaque tokens before any model call. The mapping never leaves the region.</p>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <h2>Approval Queue</h2>
+      <span class="pill ok" id="residency">checking residency…</span>
+    </div>
+
+    <div class="content">
+      <section class="card" aria-labelledby="conv-h">
+        <div class="card-h"><h3 id="conv-h">Conversation</h3></div>
+        <div class="card-b">
+          <div class="disclosure" id="disclosure">—</div>
+          <div class="msg"><div class="who">Customer</div><div id="cust-msg">—</div></div>
+          <div class="msg out"><div class="who">AI draft — awaiting your approval</div><div id="draft">—</div></div>
+        </div>
+        <div class="gate" id="gate">—</div>
+        <div class="actions">
+          <button class="primary" id="approve">Approve &amp; send<kbd>A</kbd></button>
+          <button id="edit">Edit<kbd>E</kbd></button>
+          <button class="danger" id="deny">Deny<kbd>D</kbd></button>
+        </div>
+      </section>
+
+      <aside style="display:grid;gap:20px">
+        <section class="card" aria-labelledby="conf-h">
+          <div class="card-h"><h3 id="conf-h">Why this needs review</h3></div>
+          <div class="card-b" id="signals"><div class="empty">—</div></div>
+        </section>
+        <section class="card" aria-labelledby="trace-h">
+          <div class="card-h"><h3 id="trace-h">Reasoning trace</h3></div>
+          <div class="card-b trace" id="trace"><div class="empty">—</div></div>
+        </section>
+        <section class="card" aria-labelledby="cost-h">
+          <div class="card-h"><h3 id="cost-h">This resolution</h3></div>
+          <div class="card-b" id="cost"><div class="empty">—</div></div>
+        </section>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite">
+  <span id="toast-msg"></span><button id="undo">Undo</button>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+// Demo credential, minted server-side for the local operator view only.
+const TOKEN = new URLSearchParams(location.search).get("token") || "";
+const authHeaders = { "Content-Type": "application/json", "Authorization": "Bearer " + TOKEN };
+let current = null;
+
+async function health() {
+  try {
+    const h = await (await fetch("/health")).json();
+    $("residency").textContent = h.region_is_eea
+      ? `EEA · ${h.region}` : `⚠ outside EEA · ${h.region}`;
+    if (!h.region_is_eea) $("residency").classList.remove("ok");
+  } catch { $("residency").textContent = "health unavailable"; }
+}
+
+function renderSignals(r) {
+  const items = [
+    ["Retrieval", r.confidence_components.retrieval_score],
+    ["Grounding", r.confidence_components.grounding_score],
+    ["Policy match", r.confidence_components.policy_match_score],
+    ["Familiarity", 1 - r.confidence_components.novelty_score],
+  ];
+  const weakestLabel = {
+    retrieval: "Retrieval", grounding: "Grounding",
+    policy_match: "Policy match", novelty: "Familiarity",
+  }[r.weakest_signal];
+
+  $("signals").innerHTML = items.map(([label, v]) => {
+    const weak = label === weakestLabel;
+    return `<div class="sig"><span>${label}${weak ? " ←" : ""}</span>
+      <span class="bar ${weak ? "weak" : ""}"><span style="width:${Math.round(v*100)}%"></span></span></div>`;
+  }).join("") +
+  `<div class="warn"><b>Weakest signal: ${weakestLabel}.</b>
+   The score shown is the lowest of the four, not an average — so one weak
+   signal cannot be hidden by three strong ones.</div>`;
+}
+
+function renderTrace(steps) {
+  $("trace").innerHTML = steps.length ? steps.map(s => `
+    <div class="step">
+      <span class="kind ${s.kind}">${s.kind}</span>
+      <div>${s.tool ? s.tool : s.text}</div>
+      ${s.result ? `<div class="res">${s.result}</div>` : ""}
+    </div>`).join("") : `<div class="empty">No steps recorded.</div>`;
+}
+
+function toast(msg) {
+  $("toast-msg").textContent = msg;
+  $("toast").classList.add("show");
+  clearTimeout(window._t);
+  window._t = setTimeout(() => $("toast").classList.remove("show"), 5000);
+}
+
+async function load() {
+  const body = {
+    message: "Hi, my order hasn't arrived and I need it before Friday. Can you check?",
+    customer_ref: "demo-1", locale: "en",
+    customer_name: "Maya Chen", customer_email: "maya.chen@example.test",
+    order_refs: ["#4821"],
+  };
+  const res = await fetch("/chat", { method: "POST", headers: authHeaders, body: JSON.stringify(body) });
+  if (!res.ok) { $("gate").textContent = "Sign in required — append ?token=… to the URL."; return; }
+  const r = await res.json();
+  current = r;
+  $("disclosure").textContent = r.disclosure;
+  $("cust-msg").textContent = body.message;
+  $("draft").textContent = r.draft || "(the model produced no answer for this turn)";
+  $("gate").innerHTML = `<b>Gate decision: ${r.decision.replace("_", " ")}</b> — ${r.reason}.
+    Deterministic code made this call, not the model.`;
+  renderSignals(r); renderTrace(r.trace);
+  $("cost").innerHTML =
+    `<div class="stat"><span>Model cost</span><b>€${(r.cost_cents/100).toFixed(4)}</b></div>
+     <div class="stat"><span>Latency</span><b>${r.latency_ms} ms</b></div>
+     <div class="stat"><span>Confidence</span><b>${(r.confidence*100).toFixed(0)}%</b></div>`;
+}
+
+async function submit(decision) {
+  if (!current) return;
+  const body = { run_id: current.run_id, decision };
+  if (decision === "edit") body.edited_draft = $("draft").textContent;
+  const res = await fetch("/approvals", { method: "POST", headers: authHeaders, body: JSON.stringify(body) });
+  if (!res.ok) { toast("Not permitted for your role."); return; }
+  const r = await res.json();
+  toast(r.note);
+}
+
+$("approve").onclick = () => submit("approve");
+$("edit").onclick = () => { $("draft").contentEditable = "true"; $("draft").focus(); toast("Editing — your correction is kept as training signal."); };
+$("deny").onclick = () => submit("deny");
+$("undo").onclick = () => toast("Reverted. A reversal demotes any promoted rule immediately.");
+
+document.addEventListener("keydown", (e) => {
+  const el = document.activeElement;
+  if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
+  const map = { a: "approve", d: "deny" };
+  if (e.key.toLowerCase() === "e") { $("edit").click(); }
+  else if (map[e.key.toLowerCase()]) submit(map[e.key.toLowerCase()]);
+});
+
+health(); load();
+</script>
+</body>
+</html>
