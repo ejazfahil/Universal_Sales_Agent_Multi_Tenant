@@ -29,6 +29,12 @@ import sys
 
 BANNED = re.compile(r"sentiment|emotion", re.IGNORECASE)
 
+#: A line may opt out with `# i6-ok: <reason>`. Used for *negative*
+#: declarations — publishing that we do not infer emotion is useful to an
+#: auditor, and banning the word would delete the disclosure. Every
+#: exemption is printed on each run so they cannot pile up unnoticed.
+EXEMPT = re.compile(r"#\s*i6-ok:\s*(\S.*)$")
+
 
 def _docstring_nodes(tree: ast.AST) -> set[int]:
     """id() of every string node that is a docstring, so we can ignore them."""
@@ -46,11 +52,28 @@ def _docstring_nodes(tree: ast.AST) -> set[int]:
     return ignored
 
 
-def check_file(path: pathlib.Path) -> list[tuple[int, str]]:
-    """Return (lineno, offending token) for each code-level use."""
-    tree = ast.parse(path.read_text(), filename=str(path))
+def check_file(path: pathlib.Path) -> tuple[list[tuple[int, str]], list[str]]:
+    """Return (violations, exemptions) for one file."""
+    source = path.read_text()
+    lines = source.splitlines()
+    tree = ast.parse(source, filename=str(path))
     docstrings = _docstring_nodes(tree)
     hits: list[tuple[int, str]] = []
+    exemptions: list[str] = []
+
+    def _exempt(start: int, end: int) -> bool:
+        """Look for the marker on the node's own lines, or the line above it.
+
+        A field is usually annotated by a comment on the preceding line, and a
+        multi-line string carries its marker at the end — so a single-line check
+        would miss both and push people towards deleting the disclosure instead.
+        """
+        for lineno in range(max(1, start - 1), min(end, len(lines)) + 1):
+            match = EXEMPT.search(lines[lineno - 1])
+            if match is not None:
+                exemptions.append(f"{path}:{lineno}: {match.group(1).strip()}")
+                return True
+        return False
 
     for node in ast.walk(tree):
         candidates: list[str] = []
@@ -71,18 +94,29 @@ def check_file(path: pathlib.Path) -> list[tuple[int, str]]:
 
         for text in candidates:
             if BANNED.search(text):
-                hits.append((getattr(node, "lineno", 0), text[:80]))
-    return hits
+                lineno = getattr(node, "lineno", 0)
+                end = getattr(node, "end_lineno", None) or lineno
+                if not _exempt(lineno, end):
+                    hits.append((lineno, text[:80]))
+    return hits, exemptions
 
 
 def main() -> int:
     roots = [pathlib.Path(a) for a in sys.argv[1:]] or [pathlib.Path("app")]
     violations: list[str] = []
+    exemptions: list[str] = []
 
     for root in roots:
         for path in sorted(root.rglob("*.py")):
-            for lineno, token in check_file(path):
-                violations.append(f"{path}:{lineno}: {token!r}")
+            hits, exempt = check_file(path)
+            violations.extend(f"{path}:{lineno}: {token!r}" for lineno, token in hits)
+            exemptions.extend(exempt)
+
+    if exemptions:
+        print(f"I6 exemptions in force ({len(exemptions)}) — review these:")
+        for e in exemptions:
+            print(f"  {e}")
+        print()
 
     if violations:
         print("Invariant I6 violated — emotion/sentiment inference in code:")

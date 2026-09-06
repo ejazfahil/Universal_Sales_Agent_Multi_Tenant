@@ -129,6 +129,7 @@ class PolicyOut(BaseModel):
     money_always_gated: bool
     autonomous_threshold: float
     escalation_floor: float
+    # i6-ok: negative declaration — publishes that we do NOT infer emotion
     emotion_inference: bool
     summary: str
 
@@ -143,10 +144,11 @@ def policy(ctx: Annotated[TenantContext, Depends(require("read"))]) -> PolicyOut
         money_always_gated=p.money_hard_cap_cents == 0,
         autonomous_threshold=AUTONOMOUS_THRESHOLD,
         escalation_floor=ESCALATION_FLOOR,
-        emotion_inference=False,  # invariant I6, never enabled
+        emotion_inference=False,  # i6-ok: negative declaration, always False by design
         summary=(
             "Read-only tools may run unattended above "
             f"{AUTONOMOUS_THRESHOLD:.0%} confidence. Anything moving money "
+            # i6-ok: disclosure text stating we do not infer emotion
             "requires human approval. No emotional state is inferred."
         ),
     )
