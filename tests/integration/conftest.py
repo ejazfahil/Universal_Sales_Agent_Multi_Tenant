@@ -104,4 +104,11 @@ def two_tenants(migrated: Engine) -> Iterator[tuple[uuid.UUID, uuid.UUID]]:
     with migrated.begin() as conn:
         # Cleanup runs as superuser: tenants has no RLS policy, and cascades
         # must reach rows the app role can no longer see.
+        #
+        # audit_logs is append-only (migration 0004) and references tenants with
+        # ON DELETE RESTRICT, so the trigger has to be suspended to reclaim test
+        # data. session_replication_role is superuser-only and transaction-local.
+        # This is a test-teardown escape hatch and must never appear in app code.
+        conn.execute(sa.text("SET LOCAL session_replication_role = replica"))
+        conn.execute(sa.text("DELETE FROM audit_logs WHERE tenant_id = ANY(:ids)"), {"ids": [a, b]})
         conn.execute(sa.text("DELETE FROM tenants WHERE id = ANY(:ids)"), {"ids": [a, b]})
