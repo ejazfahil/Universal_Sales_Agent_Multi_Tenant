@@ -16,15 +16,15 @@ Spec: [`BUILD_PROMPT.md`](BUILD_PROMPT.md) §5. Read it before starting a ticket
 | 2026-09-06 | — | ✅ | Research + specification complete. `docs/01`, `docs/02`, `docs/03` published. |
 | 2026-09-06 | M0-1 Scaffold + CI | ✅ | `ruff check` clean · `ruff format --check` clean (13 files) · `mypy --strict app/` → **Success: no issues found in 5 source files** · `pytest -q` → **9 passed** · live `GET /health` → **200** `{"status":"ok","version":"0.1.0","environment":"local","region":"eu-central-1","region_is_eea":true}` · `docker compose config` → **VALID**. ⚠️ `docker compose up` not executed — Docker daemon not running on this machine. See Blockers. |
 | 2026-09-06 | M0-2 Schema, migrations, RLS | ✅ | **AC executed in CI against a live pgvector service** — [run 34006500710](https://github.com/ejazfahil/Universal_Sales_Agent_Multi_Tenant/actions/runs/34006500710): `6 passed` in `tests/integration`, explicitly asserted not-skipped. Migrations `up → down → up` clean. `mypy --strict` 8 files clean · `ruff` clean (25 files) · unit `9 passed`. Took **3 failed CI rounds** to get right; see Decisions. |
-| | M0-3 Append-only audit log | ⬜ | |
-| | M0-4 Tenant auth + RBAC | ⬜ | |
-| | M0-5 Pseudonymisation gateway | ⬜ | |
-| | M0-6 Tool layer | ⬜ | |
-| | M0-7 Agent runner | ⬜ | |
-| | M0-8 Confidence + gate | ⬜ | |
-| | M0-9 Approvals + Art. 50 + GDPR | ⬜ | |
-| | M0-10 Minimal operator UI | ⬜ | |
-| | M0-11 Injection eval | ⬜ | |
+| 2026-09-06 | M0-3 Append-only audit log | ✅ | Grants + trigger. Test asserts a **superuser** UPDATE also raises — grants alone do not bind one. |
+| 2026-09-06 | M0-4 Tenant auth + RBAC | ✅ | Signed bearer token, constant-time compare. `viewer` gets 403 on `/approvals`. Settings refuse to boot staging/prod on the placeholder secret. |
+| 2026-09-06 | M0-5 Pseudonymisation gateway | ✅ | 50-message golden set across EU languages, asserted on the **serialized** body. Round-trip lossless, tokens tenant-scoped, and a test proving `assert_clean` actually fires. |
+| 2026-09-06 | M0-6 Tool layer | ✅ | READ/WRITE/MONEY/CONTROL classification, `strict: true` schemas, fixture backend behind a real interface. |
+| 2026-09-06 | M0-7 Agent runner | ✅ | Gateway wraps the model call itself. Real `response.usage` → `cost_cents`. `stop_reason == refusal` handled as failure, not an empty answer. |
+| 2026-09-06 | M0-8 Confidence + gate | ✅ | `min()` of four signals. 20+ table-driven tests incl. *a trusted rule cannot unlock money* and *one reversal demotes instantly*. |
+| 2026-09-06 | M0-9 Approvals + Art. 50 + GDPR | ✅ | Disclosure in 10 EU languages with base-language fallback; verified live (`locale=de` → German). Erasure scope names vectors + vault. |
+| 2026-09-06 | M0-10 Minimal operator UI | ✅ | Console at `/`, verified in a browser. Surfaces the **weakest** signal, not a composite badge. Keyboard A/E/D. |
+| 2026-09-06 | M0-11 Injection eval | ✅ | 30 adversarial messages, 0 unlock money and 0 leak identifiers. Immediately caught a real bug: `#4821` used as a sample in a tool schema. |
 
 ## Blockers
 
@@ -53,9 +53,9 @@ Record any judgement call a future agent would otherwise re-litigate.
 ## Verification gates (M0 exit)
 
 - [x] Tenant B cannot read tenant A's data with RLS on and no `WHERE` clause — *verified in CI run 34006500710, as a non-superuser role*
-- [ ] `UPDATE audit_logs` raises at the database
-- [ ] Serialized Anthropic request body contains zero raw identifiers
-- [ ] Conversation opens with a localised AI disclosure
-- [ ] Erasure removes the subject from Postgres, pgvector and the vault
-- [ ] `pytest tests/ -q` green; injection eval 0/30 breaches
-- [ ] `ruff check .` and `mypy --strict app/` clean
+- [x] `UPDATE audit_logs` raises at the database
+- [x] Serialized Anthropic request body contains zero raw identifiers
+- [x] Conversation opens with a localised AI disclosure
+- [ ] Erasure removes the subject from Postgres, pgvector and the vault — *scope published at `/gdpr/erasure-scope`; full cascade lands with M1 persistence*
+- [x] `pytest tests/ -q` green; injection eval 0/30 breaches
+- [x] `ruff check .` and `mypy --strict app/` clean
