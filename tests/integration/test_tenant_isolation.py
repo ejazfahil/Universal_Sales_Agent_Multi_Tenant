@@ -99,7 +99,7 @@ def test_write_into_another_tenant_is_rejected(
     """WITH CHECK: scoped to B, you cannot insert a row belonging to A."""
     tenant_a, tenant_b = two_tenants
     with pytest.raises(sa.exc.DatabaseError), migrated.begin() as conn:
-        conn.execute(sa.text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(tenant_b)})
+        scope_to_tenant(conn, tenant_b)
         conn.execute(
             sa.text("INSERT INTO customers (id, tenant_id, name) VALUES (:id, :tid, 'smuggled')"),
             {"id": uuid.uuid4(), "tid": tenant_a},

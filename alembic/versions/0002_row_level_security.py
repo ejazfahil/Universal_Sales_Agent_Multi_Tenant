@@ -10,10 +10,13 @@ Two details that are easy to get wrong and fatal if missed:
 * ``FORCE ROW LEVEL SECURITY`` — without it the *table owner* bypasses every
   policy. Since migrations usually run as the owner, a test that passes as a
   plain user can still leak in production. FORCE closes that.
-* ``current_setting('app.tenant_id', true)`` — the ``true`` makes a missing GUC
-  return NULL instead of raising. NULL fails the comparison, so a request that
-  forgot to set the tenant sees **nothing**, rather than erroring in a way
-  someone might be tempted to except-and-continue. Fail closed, quietly.
+* ``NULLIF(current_setting('app.tenant_id', true), '')::uuid`` — the ``true``
+  makes a *missing* GUC return NULL rather than raise, and the NULLIF handles
+  the case where it was explicitly set to the empty string. Without NULLIF,
+  ``''::uuid`` raises ``invalid input syntax for type uuid``, which is an error
+  someone may be tempted to except-and-continue past. With it, the comparison
+  is NULL, the row is filtered, and a request that forgot to set the tenant
+  sees **nothing**. Fail closed, quietly.
 
 Superusers still bypass RLS by design. The application must never connect as
 one; see ``docs/02-eu-platform-plan.md``.
@@ -55,8 +58,8 @@ def upgrade() -> None:
         op.execute(
             f"""
             CREATE POLICY {POLICY} ON {table}
-            USING (tenant_id = current_setting('app.tenant_id', true)::uuid)
-            WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid)
+            USING (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+            WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
             """
         )
 
