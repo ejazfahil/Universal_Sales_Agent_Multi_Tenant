@@ -74,6 +74,7 @@ Confidence is the **minimum** of retrieval, grounding, policy-match and inverse-
 | [`docs/01-master-plan.md`](docs/01-master-plan.md) | Reference UI specification, data model, gate design, API surface |
 | [`docs/02-eu-platform-plan.md`](docs/02-eu-platform-plan.md) | EU architecture, GDPR checklist, AI Act analysis, vertical map |
 | [`docs/03-market-and-positioning.md`](docs/03-market-and-positioning.md) | Market analysis, ICP, competitive landscape, honest assessment of what is and is not defensible |
+| [`docs/reference/`](docs/reference/) | Working references — [AI Act obligations mapped to tickets](docs/reference/eu-ai-act-obligations.md), [design tokens](docs/reference/design-tokens.css), [annotated sources](docs/reference/sources.md) |
 | [`PROGRESS.md`](PROGRESS.md) | Execution ledger |
 
 ## Roadmap

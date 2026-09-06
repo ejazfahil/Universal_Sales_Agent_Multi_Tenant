@@ -1,0 +1,97 @@
+/* ---------------------------------------------------------------------------
+ * Design tokens — operator surface
+ *
+ * Consumed by ticket M0-10 (minimal operator UI) and, later, M5 (full UI).
+ * Values extracted from the reference product's public stylesheet and recorded
+ * here so the UI work does not have to re-derive them from a Markdown table.
+ *
+ * These are factual colour/typography values, not brand assets. Do NOT copy the
+ * reference product's name, logo, or marketing copy — see README "Honest scope".
+ *
+ * Palette is warm-neutral (Tailwind `stone` family) with a terracotta accent.
+ * ------------------------------------------------------------------------- */
+
+:root {
+  /* --- surfaces --- */
+  --bg:            #F7F6F4;   /* app background */
+  --sf:            #FFFFFF;   /* card / sidebar surface */
+  --el:            #F0EFED;   /* elevation 1 — also input background */
+  --el2:           #E8E7E4;   /* elevation 2 */
+  --el3:           #DDDBD8;   /* elevation 3 */
+  --overlay:       rgba(247, 246, 244, .85);
+  --topbar-blur:   rgba(255, 255, 255, .85);
+  --input-bg:      var(--el);
+
+  /* --- text --- */
+  --tx:            #1C1917;   /* primary */
+  --tx2:           #57534E;   /* secondary */
+  --tx3:           #A8A29E;   /* tertiary — section labels */
+
+  /* --- borders --- */
+  --bd:            rgba(28, 25, 23, .08);   /* default */
+  --bds:           rgba(28, 25, 23, .12);   /* strong */
+  --bdh:           rgba(28, 25, 23, .18);   /* hover */
+
+  /* --- brand: AI / active state --- */
+  --orange:        #D94A1E;
+  --orange-h:      #C4411A;
+  --orange-m:      rgba(217, 74, 30, .08);
+  --orange-s:      rgba(217, 74, 30, .04);
+  --orange-glow:   rgba(217, 74, 30, .15);
+
+  /* --- semantic ---
+   * green  = approve / resolved      blue   = customer / tool call
+   * red    = deny / SLA breach       violet = approval queue accent
+   * yellow = pending / warning       cyan   = secondary metric          */
+  --green:         #16A34A;
+  --green-h:       #15803D;
+  --green-m:       rgba(22, 163, 74, .08);
+  --green-fg:      #FFFFFF;
+
+  --blue:          #2563EB;
+  --blue-h:        #1D4ED8;
+  --blue-m:        rgba(37, 99, 235, .08);
+  --blue-s:        rgba(37, 99, 235, .04);
+
+  --red:           #DC2626;
+  --red-m:         rgba(220, 38, 38, .06);
+
+  --violet:        #7C3AED;
+  --violet-m:      rgba(124, 58, 237, .08);
+
+  --cyan:          #0891B2;
+  --cyan-m:        rgba(8, 145, 178, .08);
+
+  --yellow:        #CA8A04;
+  --yellow-m:      rgba(202, 138, 4, .08);
+
+  /* --- misc --- */
+  --bar-muted:         rgba(28, 25, 23, .08);
+  --card-shadow:       0 1px 3px rgba(0, 0, 0, .06), 0 1px 2px rgba(0, 0, 0, .04);
+  --card-shadow-hover: 0 8px 24px rgba(0, 0, 0, .08);
+  --scrollbar-thumb:   rgba(28, 25, 23, .1);
+  --scrollbar-hover:   rgba(28, 25, 23, .2);
+
+  /* --- typography --- */
+  --font-body:     Inter, system-ui, sans-serif;
+  --font-display:  "Space Grotesk", sans-serif;   /* headings, topbar title @700 */
+  --font-mono:     "JetBrains Mono", monospace;   /* tool calls, reasoning trace */
+
+  /* --- layout --- */
+  --sidebar-w:     260px;
+  --topbar-h:      52px;
+  --ease-collapse: cubic-bezier(.16, 1, .3, 1);   /* sidebar collapse, 300ms */
+}
+
+/* Confidence chip thresholds — see BUILD_PROMPT.md M0-8.
+ * Confidence is min(retrieval, grounding, policy_match, 1 - novelty).
+ * Surface the WEAKEST signal, not just the composite: a single reassuring
+ * number is what manufactures automation bias (AI Act Art. 14(4)). */
+.conf-high { color: var(--green);  background: var(--green-m);  }  /* >= 90 */
+.conf-med  { color: var(--yellow); background: var(--yellow-m); }  /* 70-89 */
+.conf-low  { color: var(--red);    background: var(--red-m);    }  /* < 70  */
+
+/* Reasoning trace step kinds — see docs/01-master-plan.md §2.5 ReasoningStep */
+.step-tool           { color: var(--blue);   font-family: var(--font-mono); }
+.step-policy         { color: var(--violet); }
+.step-recommendation { color: var(--orange); }
