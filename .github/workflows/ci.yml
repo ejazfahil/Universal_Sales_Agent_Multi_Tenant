@@ -75,10 +75,7 @@ jobs:
           echo "$OUT" | grep -qE '[0-9]+ passed' || { echo "::error::no tests passed"; exit 1; }
 
       # Invariant I6: no emotion or sentiment inference in the EU path.
-      - name: Guard — no sentiment inference
-        run: |
-          if grep -rniE 'sentiment|emotion' app/ --include='*.py'; then
-            echo "::error::Invariant I6 violated: emotion/sentiment inference found in app/"
-            exit 1
-          fi
-          echo "I6 clean — no emotion inference in app/"
+      # AST-based, so comments and docstrings may explain the invariant without
+      # tripping it. A guard that punishes documentation gets documentation deleted.
+      - name: Guard — no emotion inference (invariant I6)
+        run: uv run python scripts/check_no_emotion_inference.py app
