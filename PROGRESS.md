@@ -15,7 +15,7 @@ Spec: [`BUILD_PROMPT.md`](BUILD_PROMPT.md) §5. Read it before starting a ticket
 |---|---|---|---|
 | 2026-09-06 | — | ✅ | Research + specification complete. `docs/01`, `docs/02`, `docs/03` published. |
 | 2026-09-06 | M0-1 Scaffold + CI | ✅ | `ruff check` clean · `ruff format --check` clean (13 files) · `mypy --strict app/` → **Success: no issues found in 5 source files** · `pytest -q` → **9 passed** · live `GET /health` → **200** `{"status":"ok","version":"0.1.0","environment":"local","region":"eu-central-1","region_is_eea":true}` · `docker compose config` → **VALID**. ⚠️ `docker compose up` not executed — Docker daemon not running on this machine. See Blockers. |
-| | M0-2 Schema, migrations, RLS | ⬜ | |
+| 2026-09-06 | M0-2 Schema, migrations, RLS | ✅ | **AC executed in CI against a live pgvector service** — [run 34006500710](https://github.com/ejazfahil/Universal_Sales_Agent_Multi_Tenant/actions/runs/34006500710): `6 passed` in `tests/integration`, explicitly asserted not-skipped. Migrations `up → down → up` clean. `mypy --strict` 8 files clean · `ruff` clean (25 files) · unit `9 passed`. Took **3 failed CI rounds** to get right; see Decisions. |
 | | M0-3 Append-only audit log | ⬜ | |
 | | M0-4 Tenant auth + RBAC | ⬜ | |
 | | M0-5 Pseudonymisation gateway | ⬜ | |
@@ -45,10 +45,14 @@ Record any judgement call a future agent would otherwise re-litigate.
 | 2026-09-06 | Region is a validated setting, not deployment trivia | `Settings` refuses to boot in `staging`/`production` outside an EEA region. Invariant I5 is meaningless if the app itself runs in Ohio, so the guard fails closed at startup rather than being a wiki page. `/health` reports `region_is_eea` so a probe surfaces misconfiguration. |
 | 2026-09-06 | I6 guard added to CI at M0-1, before any agent code exists | Cheaper to establish the tripwire while `app/` is empty than to retrofit it after someone copies a `sentiment` field from the reference fixtures. Verified in both directions: passes clean, and fires on a planted violation. |
 | 2026-09-06 | `httpx2` instead of `httpx` for the test client | Starlette's `TestClient` emits `StarletteDeprecationWarning` with `httpx`. Swapped in `pyproject.toml`; warning count dropped 2 → 1. |
+| 2026-09-06 | **RLS requires a non-superuser role — `FORCE` is not enough** | First CI run against real Postgres showed RLS doing *nothing*: tenant A saw 2 customers, an unset GUC saw 2, cross-tenant INSERT succeeded. Superusers bypass RLS unconditionally; `FORCE ROW LEVEL SECURITY` subjects the table *owner*, not a superuser. Migration 0003 adds `usa_app` (NOLOGIN, NOSUPERUSER, NOBYPASSRLS) assumed via `SET LOCAL ROLE`. **The isolation test now asserts `current_setting('is_superuser') = 'off'` first**, so this cannot regress into passing for the wrong reason. |
+| 2026-09-06 | RLS policy uses `NULLIF(current_setting(...), '')::uuid` | With a bare cast, an explicitly *empty* GUC hits `''::uuid` and raises `invalid input syntax for type uuid`. Raising is the wrong failure mode — an error invites an except-and-continue upstream, whereas a NULL comparison filters every row. Now fails closed and silently. |
+| 2026-09-06 | I6 guard is AST-based, not `grep` | The grep guard failed CI on `app/db/models.py`, whose docstring explains why there is no sentiment column. Weakening the invariant was the wrong fix: a guard that punishes documentation gets the documentation deleted to make CI green, which defeats a control whose purpose is auditability. `scripts/check_no_emotion_inference.py` inspects identifiers, attributes, args, keywords, class/function names and non-docstring literals. Verified three ways: clean tree passes, planted `sentiment = "frustrated"` rejected, docstring naming the invariant allowed. |
+| 2026-09-06 | Migration 0002 amended in place rather than superseded | Nothing is deployed and CI rebuilds from base each run, so a fix-up migration correcting a policy created seconds earlier would be noise. This stops being acceptable the moment anything is deployed. |
 
 ## Verification gates (M0 exit)
 
-- [ ] Tenant B cannot read tenant A's data with RLS on and no `WHERE` clause
+- [x] Tenant B cannot read tenant A's data with RLS on and no `WHERE` clause — *verified in CI run 34006500710, as a non-superuser role*
 - [ ] `UPDATE audit_logs` raises at the database
 - [ ] Serialized Anthropic request body contains zero raw identifiers
 - [ ] Conversation opens with a localised AI disclosure
