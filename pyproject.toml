@@ -42,7 +42,8 @@ select = ["E", "F", "I", "B", "UP", "N", "S", "A", "C4", "RET", "SIM", "ARG"]
 ignore = ["S101"]  # assert is fine in tests
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["ARG001"]
+# S105/S106: tests need literal secrets to exercise the auth guards.
+"tests/*" = ["ARG001", "S105", "S106"]
 # Migrations interpolate module-level constants (role and table names) into DDL.
 # These are not user input; parameter binding is not available for identifiers.
 "alembic/versions/*" = ["S608"]

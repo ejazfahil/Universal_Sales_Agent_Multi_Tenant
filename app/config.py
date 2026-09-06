@@ -20,6 +20,11 @@ Environment = Literal["local", "ci", "staging", "production"]
 # Regions that sit inside the EEA. Extend deliberately, never casually.
 EU_REGION_PREFIXES: tuple[str, ...] = ("eu-", "europe-", "eu_")
 
+#: Placeholder auth secret. Rejected outside local/ci by the validator below,
+#: so a deploy that forgot to set a real one fails at boot rather than
+#: signing tokens everyone can forge.
+DEV_SECRET_PLACEHOLDER = "dev-only-change-me"  # noqa: S105
+
 
 class Settings(BaseSettings):
     """Runtime configuration, loaded from environment or a local .env file."""
@@ -36,6 +41,7 @@ class Settings(BaseSettings):
     )
 
     # --- infrastructure ---
+    auth_secret: str = DEV_SECRET_PLACEHOLDER
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/usa"
     redis_url: str = "redis://localhost:6379/0"
 
@@ -55,6 +61,11 @@ class Settings(BaseSettings):
             raise ValueError(
                 f"deployment_region={self.deployment_region!r} is outside the EEA. "
                 f"Invariant I5 requires {self.app_env} to run in an EU region."
+            )
+        if self.app_env in ("staging", "production") and self.auth_secret == DEV_SECRET_PLACEHOLDER:
+            raise ValueError(
+                "auth_secret is still the development placeholder. "
+                f"Set a real secret before running {self.app_env}."
             )
         return self
 
