@@ -15,9 +15,14 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy.engine import Engine
 
-from tests.integration.conftest import requires_db
+from tests.integration.conftest import requires_db, scope_to_tenant
 
 pytestmark = requires_db
+
+
+def _is_superuser(conn: sa.Connection) -> bool:
+    """Superusers bypass RLS. If this is ever true, the isolation tests lie."""
+    return conn.execute(sa.text("SELECT current_setting('is_superuser')")).scalar_one() == "on"
 
 
 def _customers_visible(conn: sa.Connection) -> int:
@@ -32,18 +37,19 @@ def test_cross_tenant_select_without_where_returns_zero(
     tenant_a, tenant_b = two_tenants
 
     with migrated.begin() as conn:
-        conn.execute(sa.text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(tenant_a)})
+        scope_to_tenant(conn, tenant_a)
+        assert not _is_superuser(conn), "test must not run as superuser — RLS would be bypassed"
         assert _customers_visible(conn) == 1, "tenant A should see exactly its own customer"
 
     with migrated.begin() as conn:
-        conn.execute(sa.text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(tenant_b)})
+        scope_to_tenant(conn, tenant_b)
         visible = _customers_visible(conn)
 
     assert visible == 1, "tenant B should see exactly its own customer, not A's"
 
     # And explicitly: querying A's id while scoped to B yields nothing.
     with migrated.begin() as conn:
-        conn.execute(sa.text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(tenant_b)})
+        scope_to_tenant(conn, tenant_b)
         leaked = conn.execute(
             sa.text("SELECT count(*) FROM customers WHERE tenant_id = :a"), {"a": tenant_a}
         ).scalar_one()
@@ -54,7 +60,7 @@ def test_cross_tenant_select_without_where_returns_zero(
 def test_unset_guc_sees_nothing(migrated: Engine, two_tenants: tuple[uuid.UUID, uuid.UUID]) -> None:
     """Fail closed: a request that forgot to set the tenant sees no data at all."""
     with migrated.begin() as conn:
-        conn.execute(sa.text("SELECT set_config('app.tenant_id', NULL, true)"))
+        scope_to_tenant(conn, None)
         assert _customers_visible(conn) == 0
 
 

@@ -43,6 +43,9 @@ ignore = ["S101"]  # assert is fine in tests
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["ARG001"]
+# Migrations interpolate module-level constants (role and table names) into DDL.
+# These are not user input; parameter binding is not available for identifiers.
+"alembic/versions/*" = ["S608"]
 
 [tool.mypy]
 python_version = "3.12"

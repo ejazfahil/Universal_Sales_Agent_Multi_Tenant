@@ -23,6 +23,9 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.config import get_settings
 
+#: Non-superuser role that RLS policies actually apply to. See migration 0003.
+APP_ROLE = "usa_app"
+
 
 class Base(DeclarativeBase):
     """Declarative base with project-wide type mappings."""
@@ -57,13 +60,18 @@ def reset_engine() -> None:
 def tenant_session(tenant_id: uuid.UUID | str) -> Iterator[Session]:
     """Yield a Session with ``app.tenant_id`` set for the life of the transaction.
 
-    ``set_config(..., true)`` scopes the GUC to the transaction, so it cannot
-    leak to the next checkout of a pooled connection — a leaked tenant id would
-    be a cross-tenant read.
+    Two statements, both scoped to the transaction:
+
+    * ``SET LOCAL ROLE`` drops to a non-superuser. Superusers bypass RLS
+      unconditionally, so without this the policies are decorative.
+    * ``set_config(..., true)`` sets the tenant GUC transaction-locally, so it
+      cannot leak to the next checkout of a pooled connection — a leaked tenant
+      id would be a cross-tenant read.
     """
     factory = sessionmaker(bind=get_engine(), expire_on_commit=False, future=True)
     session = factory()
     try:
+        session.execute(text(f"SET LOCAL ROLE {APP_ROLE}"))
         session.execute(
             text("SELECT set_config('app.tenant_id', :tid, true)"),
             {"tid": str(tenant_id)},

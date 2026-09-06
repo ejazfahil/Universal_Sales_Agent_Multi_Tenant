@@ -38,6 +38,24 @@ requires_db = pytest.mark.skipif(
 )
 
 
+APP_ROLE = "usa_app"
+
+
+def scope_to_tenant(conn: sa.Connection, tenant_id: uuid.UUID | None) -> None:
+    """Drop to the non-superuser app role and set the tenant GUC.
+
+    The SET LOCAL ROLE is not optional. Tests connect as ``postgres``, a
+    superuser, and superusers bypass RLS unconditionally — FORCE does not apply
+    to them. Without this the policies are never exercised and every isolation
+    test passes for the wrong reason.
+    """
+    conn.execute(sa.text(f"SET LOCAL ROLE {APP_ROLE}"))
+    conn.execute(
+        sa.text("SELECT set_config('app.tenant_id', :t, true)"),
+        {"t": str(tenant_id) if tenant_id is not None else None},
+    )
+
+
 @pytest.fixture(scope="session")
 def engine() -> Iterator[Engine]:
     eng = sa.create_engine(DB_URL, future=True)
@@ -68,8 +86,8 @@ def two_tenants(migrated: Engine) -> Iterator[tuple[uuid.UUID, uuid.UUID]]:
                 sa.text("INSERT INTO tenants (id, name) VALUES (:id, :name)"),
                 {"id": tid, "name": name},
             )
-            # RLS is active on customers, so set the GUC before inserting.
-            conn.execute(sa.text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(tid)})
+            # RLS is active on customers, so scope before inserting.
+            scope_to_tenant(conn, tid)
             conn.execute(
                 sa.text(
                     "INSERT INTO customers (id, tenant_id, name, email) "
@@ -84,5 +102,6 @@ def two_tenants(migrated: Engine) -> Iterator[tuple[uuid.UUID, uuid.UUID]]:
             )
     yield a, b
     with migrated.begin() as conn:
-        conn.execute(sa.text("SELECT set_config('app.tenant_id', NULL, true)"))
+        # Cleanup runs as superuser: tenants has no RLS policy, and cascades
+        # must reach rows the app role can no longer see.
         conn.execute(sa.text("DELETE FROM tenants WHERE id = ANY(:ids)"), {"ids": [a, b]})

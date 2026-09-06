@@ -13,7 +13,7 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy.engine import Engine
 
-from tests.integration.conftest import requires_db
+from tests.integration.conftest import requires_db, scope_to_tenant
 
 pytestmark = requires_db
 
@@ -43,7 +43,7 @@ def test_money_action_without_approval_is_rejected(
         pytest.raises(sa.exc.IntegrityError, match="ck_money_action_requires_approval"),
         migrated.begin() as conn,
     ):
-        conn.execute(sa.text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(tenant_a)})
+        scope_to_tenant(conn, tenant_a)
         run_id = _seed_run(conn, tenant_a)
         conn.execute(
             sa.text(
@@ -60,7 +60,7 @@ def test_read_action_without_approval_is_allowed(
     """READ-class tools are autonomous by design; no approval needed."""
     tenant_a, _ = two_tenants
     with migrated.begin() as conn:
-        conn.execute(sa.text("SELECT set_config('app.tenant_id', :t, true)"), {"t": str(tenant_a)})
+        scope_to_tenant(conn, tenant_a)
         run_id = _seed_run(conn, tenant_a)
         conn.execute(
             sa.text(
