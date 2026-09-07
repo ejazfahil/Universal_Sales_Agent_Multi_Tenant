@@ -21,9 +21,10 @@ from app.agent.gate import (
     Decision,
     GatePolicy,
 )
-from app.agent.llm import ScriptedClient
+from app.agent.llm import LLMResponse, ScriptedClient
 from app.agent.runner import AgentRunner
 from app.agent.tools import FixtureBackend, build_catalogue
+from app.agent.urgency import UrgencySignals, assess
 from app.auth.tenant import TenantContext, require
 from app.compliance.disclosure import disclosure_for
 from app.privacy.detectors import Roster
@@ -38,6 +39,10 @@ class ChatIn(BaseModel):
     customer_name: str | None = None
     customer_email: str | None = None
     order_refs: list[str] = Field(default_factory=list)
+    # Facts feeding deterministic urgency (invariant I6). Never an emotion.
+    sla_minutes_remaining: int | None = None
+    order_value_cents: int = 0
+    prior_contacts: int = 0
 
 
 class ReasoningStep(BaseModel):
@@ -56,6 +61,8 @@ class ChatOut(BaseModel):
     draft: str
     delivered: bool
     confidence: float
+    urgency: str
+    urgency_reasons: list[str]
     weakest_signal: str
     confidence_components: dict[str, float]
     trace: list[ReasoningStep]
@@ -74,10 +81,41 @@ def load_policy(tenant_id: uuid.UUID) -> GatePolicy:
     return GatePolicy()
 
 
-def _runner() -> AgentRunner:
+#: Offline script: the model calls a tool, reads the result, then answers from
+#: it. This is what the pipeline does with a real key — the responses are fixed
+#: so the demo is deterministic, not so the behaviour is faked.
+def _demo_script(order_ref: str) -> list[LLMResponse]:
+    return [
+        LLMResponse(
+            text="",
+            tool_calls=[
+                {
+                    "id": "call_1",
+                    "name": "commerce_lookup_order",
+                    "input": {"order_ref": order_ref},
+                }
+            ],
+            input_tokens=820,
+            output_tokens=64,
+        ),
+        LLMResponse(
+            text=(
+                "Good news — your order is already with the carrier and tracking "
+                "shows it delivered to the front door yesterday. If it isn't "
+                "where you expect, I can open a carrier trace right away and send "
+                "a replacement so you have it before Friday."
+            ),
+            input_tokens=1140,
+            output_tokens=96,
+        ),
+    ]
+
+
+def _runner(order_ref: str | None = None) -> AgentRunner:
     """M0 wiring. Swapping ScriptedClient for AnthropicClient is a one-line
     change once a key is configured; nothing else moves."""
-    return AgentRunner(llm=ScriptedClient(), catalogue=build_catalogue(FixtureBackend()))
+    client = ScriptedClient(responses=_demo_script(order_ref) if order_ref else [])
+    return AgentRunner(llm=client, catalogue=build_catalogue(FixtureBackend()))
 
 
 @router.post("", response_model=ChatOut)
@@ -91,10 +129,20 @@ def chat(
         order_refs=list(body.order_refs),
     )
 
-    result = _runner().run(
+    urgency = assess(
+        UrgencySignals(
+            sla_minutes_remaining=body.sla_minutes_remaining,
+            order_value_cents=body.order_value_cents,
+            prior_contacts=body.prior_contacts,
+            message=body.message,
+        )
+    )
+
+    result = _runner(body.order_refs[0] if body.order_refs else None).run(
         tenant_id=str(ctx.tenant_id),
         customer_message=body.message,
         roster=roster,
+        urgency=urgency.level,
     )
 
     components: dict[str, Any] = result.confidence.as_dict()
@@ -107,6 +155,8 @@ def chat(
         draft=result.draft,
         delivered=result.gate.decision is Decision.AUTONOMOUS,
         confidence=components["confidence"],
+        urgency=urgency.level,
+        urgency_reasons=urgency.reasons,
         weakest_signal=result.confidence.weakest,
         confidence_components=components,
         trace=[ReasoningStep(**step) for step in result.trace],

@@ -52,7 +52,8 @@ body{background:var(--bg);color:var(--tx);font-family:var(--font-body);font-size
 .sig:last-child{border-bottom:0}
 .bar{height:5px;border-radius:3px;background:var(--bar-muted);overflow:hidden;width:110px;align-self:center}
 .bar span{display:block;height:100%;background:var(--green)}
-.bar.weak span{background:var(--red)}
+.bar.mid span{background:var(--yellow)}
+.bar.low span{background:var(--red)}
 .warn{background:var(--yellow-m);border:1px solid var(--bd);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--tx2);margin-top:12px}
 .warn b{color:var(--yellow)}
 .actions{display:flex;gap:8px;padding:14px 16px;border-top:1px solid var(--bd);flex-wrap:wrap}
@@ -69,6 +70,8 @@ kbd{font-family:var(--font-mono);font-size:10px;background:rgba(255,255,255,.25)
 .toast.show{transform:translateX(-50%) translateY(0)}
 .toast button{background:transparent;border:0;color:var(--orange);padding:0;font-size:13px}
 .empty{padding:44px 16px;text-align:center;color:var(--tx3)}
+.ureason{font-size:12px;color:var(--tx2);padding:3px 0 3px 4px}
+.ubadge{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.05em;padding:3px 9px;border-radius:6px;background:var(--red-m);color:var(--red)}
 .stat{display:flex;justify-content:space-between;font-size:12px;padding:6px 0}
 .stat b{font-family:var(--font-mono)}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -120,6 +123,10 @@ kbd{font-family:var(--font-mono);font-size:10px;background:rgba(255,255,255,.25)
           <div class="card-h"><h3 id="conf-h">Why this needs review</h3></div>
           <div class="card-b" id="signals"><div class="empty">—</div></div>
         </section>
+        <section class="card" aria-labelledby="urg-h">
+          <div class="card-h"><h3 id="urg-h">Why this is urgent</h3></div>
+          <div class="card-b" id="urgency"><div class="empty">—</div></div>
+        </section>
         <section class="card" aria-labelledby="trace-h">
           <div class="card-h"><h3 id="trace-h">Reasoning trace</h3></div>
           <div class="card-b trace" id="trace"><div class="empty">—</div></div>
@@ -165,14 +172,21 @@ function renderSignals(r) {
     policy_match: "Policy match", novelty: "Familiarity",
   }[r.weakest_signal];
 
+  const band = (v) => v >= 0.9 ? "" : v >= 0.7 ? "mid" : "low";
+  const lowest = Math.min(...items.map(([, v]) => v));
+
   $("signals").innerHTML = items.map(([label, v]) => {
     const weak = label === weakestLabel;
     return `<div class="sig"><span>${label}${weak ? " ←" : ""}</span>
-      <span class="bar ${weak ? "weak" : ""}"><span style="width:${Math.round(v*100)}%"></span></span></div>`;
+      <span class="bar ${band(v)}"><span style="width:${Math.round(v*100)}%"></span></span></div>`;
   }).join("") +
-  `<div class="warn"><b>Weakest signal: ${weakestLabel}.</b>
-   The score shown is the lowest of the four, not an average — so one weak
-   signal cannot be hidden by three strong ones.</div>`;
+  // The message adapts: "weakest" is not the same as "weak". Calling a 96%
+  // signal a problem would train operators to ignore the panel.
+  `<div class="warn"><b>Weakest signal: ${weakestLabel} (${Math.round(lowest*100)}%).</b>
+   ${lowest >= 0.9
+     ? "All four are strong. The score is the lowest of the four, not an average, so it stays conservative."
+     : "The score shown is the lowest of the four, not an average — so one weak signal cannot be hidden by three strong ones."}
+   </div>`;
 }
 
 function renderTrace(steps) {
@@ -197,6 +211,8 @@ async function load() {
     customer_ref: "demo-1", locale: "en",
     customer_name: "Maya Chen", customer_email: "maya.chen@example.test",
     order_refs: ["#4821"],
+    // Facts feeding deterministic urgency — never an inferred emotion.
+    sla_minutes_remaining: 12, order_value_cents: 8900, prior_contacts: 2,
   };
   const res = await fetch("/chat", { method: "POST", headers: authHeaders, body: JSON.stringify(body) });
   if (!res.ok) { $("gate").textContent = "Sign in required — append ?token=… to the URL."; return; }
@@ -208,6 +224,12 @@ async function load() {
   $("gate").innerHTML = `<b>Gate decision: ${r.decision.replace("_", " ")}</b> — ${r.reason}.
     Deterministic code made this call, not the model.`;
   renderSignals(r); renderTrace(r.trace);
+  $("urgency").innerHTML =
+    `<div style="margin-bottom:10px"><span class="ubadge">${r.urgency.toUpperCase()}</span></div>` +
+    r.urgency_reasons.map(x => `<div class="ureason">• ${x}</div>`).join("") +
+    `<div class="warn" style="margin-top:12px"><b>Computed from facts, not tone.</b>
+     No emotional state is inferred — that would make this a high-risk system
+     under the EU AI Act.</div>`;
   $("cost").innerHTML =
     `<div class="stat"><span>Model cost</span><b>€${(r.cost_cents/100).toFixed(4)}</b></div>
      <div class="stat"><span>Latency</span><b>${r.latency_ms} ms</b></div>
