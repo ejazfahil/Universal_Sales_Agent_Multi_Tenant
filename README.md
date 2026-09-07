@@ -5,7 +5,7 @@
 ### An AI customer-support agent that a European privacy officer can actually sign off on
 
 [![CI](https://github.com/ejazfahil/Universal_Sales_Agent_Multi_Tenant/actions/workflows/ci.yml/badge.svg)](https://github.com/ejazfahil/Universal_Sales_Agent_Multi_Tenant/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/tests-209%20passing-16A34A)
+![Tests](https://img.shields.io/badge/tests-222%20passing-16A34A)
 ![Type safety](https://img.shields.io/badge/mypy--strict-clean-2563EB)
 ![Python](https://img.shields.io/badge/python-3.12+-3776AB)
 ![EU AI Act](https://img.shields.io/badge/EU%20AI%20Act-limited%20risk%20by%20design-D94A1E)
@@ -20,7 +20,7 @@ Every decision is written to a log the database itself refuses to edit.**
 
 <div align="center">
 
-| 209 | 4 | 10 | 0 |
+| 222 | 4 | 10 | 0 |
 |:---:|:---:|:---:|:---:|
 | **tests passing** | **guarantees enforced<br/>by the database** | **EU languages<br/>supported** | **raw identifiers<br/>leaving the EEA** |
 
@@ -528,6 +528,7 @@ Nothing below is aspirational. Each row is a test that runs on every push.
 | Every conversation discloses the AI | All 10 languages | `test_api.py` |
 | A read-only role can't approve | Returns 403 | `test_api.py` |
 | No emotion detection anywhere | Build fails if it appears in code | `check_no_emotion_inference.py` |
+| …and tone genuinely doesn't affect routing | Identical facts + opposite tone → identical urgency | `test_urgency.py` |
 
 ### Where the 209 tests are
 
@@ -538,6 +539,7 @@ pie showData
     "Pseudonymisation / PII" : 58
     "Decision gate" : 23
     "API, RBAC, disclosure" : 23
+    "Deterministic urgency" : 13
     "Config & residency" : 11
     "Auth & tokens" : 11
     "Tenant isolation (DB)" : 4
@@ -548,12 +550,12 @@ pie showData
 The two largest groups are **adversarial** — injection attempts and PII leak attempts. That distribution is deliberate: those are the tests that would let real harm through.
 
 ```
-209 tests                          ✅ passing
-  ├─ 126 unit
+222 tests                          ✅ passing
+  ├─ 139 unit
   ├─  73 eval (adversarial)
   └─  10 integration (real Postgres, asserted not-skipped in CI)
 
-mypy --strict     ✅ clean, 26 source files
+mypy --strict     ✅ clean, 27 source files
 ruff + format     ✅ clean
 I6 emotion guard  ✅ clean (3 reviewed exemptions, all negative declarations)
 ```
@@ -562,8 +564,8 @@ I6 emotion guard  ✅ clean (3 reviewed exemptions, all negative declarations)
 
 | Code | Lines |
 |---|--:|
-| Application (`app/`) | 2,148 |
-| Tests (`tests/`) | 1,048 |
+| Application (`app/`) | 2,317 |
+| Tests (`tests/`) | 1,140 |
 | Migrations (`alembic/`) | 480 |
 
 </div>
@@ -646,7 +648,7 @@ git clone https://github.com/ejazfahil/Universal_Sales_Agent_Multi_Tenant.git
 cd Universal_Sales_Agent_Multi_Tenant
 
 uv sync --all-groups          # install (uv is a fast Python package manager)
-uv run pytest -q              # 199 tests — no database, no API key needed
+uv run pytest -q              # 212 tests — no database, no API key needed
 uv run uvicorn app.main:app --reload
 ```
 
@@ -663,7 +665,7 @@ With a database, which adds the isolation and immutability tests:
 ```bash
 docker compose up -d
 uv run alembic upgrade head
-uv run pytest -q              # now 209
+uv run pytest -q              # now 222
 ```
 
 ---
