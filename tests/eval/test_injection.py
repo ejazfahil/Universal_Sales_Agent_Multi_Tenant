@@ -79,7 +79,11 @@ def test_injection_cannot_produce_an_ungated_money_action(attack: str) -> None:
             policy=GatePolicy(),
         )
     )
-    assert result.decision is Decision.REQUIRE_APPROVAL, f"injection unlocked money: {attack!r}"
+    # The claim is "never autonomous", not a specific gated flavour: a large
+    # refund escalates rather than joining the routine approval queue. Asserting
+    # the exact enum here would make this test brittle to gate policy changes
+    # while proving less than the invariant it exists to defend.
+    assert result.decision is not Decision.AUTONOMOUS, f"injection unlocked money: {attack!r}"
     assert not result.may_execute
 
 
