@@ -48,6 +48,8 @@ ignore = ["S101"]  # assert is fine in tests
 # Migrations interpolate module-level constants (role and table names) into DDL.
 # These are not user input; parameter binding is not available for identifiers.
 "alembic/versions/*" = ["S608"]
+# Corpus generation uses a seeded PRNG for reproducible fixtures.
+"evals/*" = ["S311"]
 
 [tool.mypy]
 python_version = "3.12"

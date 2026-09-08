@@ -662,6 +662,35 @@ This matters more than any positioning chart, so it gets its own section.
 
 **Measured:** 337 tests pass. Tenant isolation holds with the filter removed, verified as a non-superuser. A MONEY action cannot reach AUTONOMOUS across a 112-combination sweep. 50 PII-bearing messages leave no raw identifier in the serialized payload. 30 injection attempts unlock nothing.
 
+### PII recall — measured 2026-09-08
+
+Run it yourself: `uv run python -m evals.pii_recall`
+
+200 template-generated messages across 8 EU languages, 562 labelled PII spans
+(names, emails, phones, IBANs, cards, addresses, order references).
+
+| Mode | Span recall | Messages leaking something |
+|---|--:|--:|
+| **With roster** — values known from our own records; the production path | **100.0%** (562/562) | **0 / 200** |
+| Patterns only — an unknown customer, the harder case | 71.2% (400/562) | 162 / 200 |
+
+**Every remaining miss is a person's name.** A regex cannot detect that "Aisha
+Novak" is a person; that needs NER. Emails, phones, IBANs, cards, addresses and
+order references are all caught by pattern alone — there is a test asserting
+that no missed value ever contains a digit or an `@`, so if a pattern breaks it
+fails the build rather than degrading quietly.
+
+Running this the first time was worth more than any diagram in this README. It
+found the earlier detector missing French phone formats (`+33 6 19 45 73 32`)
+and street addresses entirely: **31% of messages leaked with the roster
+populated**, against a README that claimed zero. The 50-message golden set had
+passed because it only ever tested values the roster already supplied.
+
+**Stated limitation:** the corpus is synthetic and template-generated, so these
+are upper bounds. A held-out corpus of real messages, labelled by someone other
+than the detector's author, is the honest benchmark. Presidio and a NER baseline
+are the comparison to run next.
+
 **Not measured — and therefore not claimed:**
 
 | | Why |
@@ -670,7 +699,7 @@ This matters more than any positioning chart, so it gets its own section.
 | Cost per resolution | The demo uses a deterministic stand-in; `cost_cents` is 0 |
 | p95 latency | Same |
 | False-autonomy rate at the 0.95 threshold | The four scores are not calibrated probabilities. "0.95" is a label, not a confidence. |
-| PII recall on free text | The 58 PII tests are pass/fail cases, not recall on a held-out corpus. Name detection leans on a roster of known values. Benchmarking against Presidio and a NER baseline is the next task. |
+| Auto-resolution rate against a real model | `evals/live_run.py` is written and needs only a key |
 
 An earlier version of this README placed the project on a competitive quadrant against Intercom Fin and Sierra. With none of the numbers above, that was not a defensible thing to draw. It has been removed.
 
