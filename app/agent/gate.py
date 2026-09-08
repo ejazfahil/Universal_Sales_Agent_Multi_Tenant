@@ -102,25 +102,38 @@ def decide(gi: GateInput) -> GateResult:
     """Return the gate decision. Pure function — trivially testable, and the
     single place a reviewer has to read to know what the agent may do."""
 
-    # --- 1. Hard blocks. No confidence score and no learned rule overrides these.
-    money = _money_total(gi.actions)
-    if money > 0:
+    # --- 1. Money. Structural, not conditional.
+    #
+    # An earlier version compared the amount against a per-tenant cap and only
+    # escalated when it was exceeded. That left a hole: a small, reversible
+    # refund under a non-zero cap fell through to the promoted-rule branch below
+    # and executed unattended. The invariant held only because the default cap
+    # happened to be zero — a guarantee resting on a default is not a guarantee,
+    # and the test that was supposed to catch it passed for the wrong reason.
+    #
+    # There is now no path from a MONEY action to AUTONOMOUS. The cap no longer
+    # decides whether a human is involved; it decides *which* human.
+    money_actions = [a for a in gi.actions if a.tool_class == "MONEY"]
+    if money_actions:
+        money = _money_total(gi.actions)
         if money > gi.policy.money_hard_cap_cents:
             return GateResult(
-                Decision.REQUIRE_APPROVAL,
-                f"money {money}c exceeds tenant cap {gi.policy.money_hard_cap_cents}c",
+                Decision.ESCALATE,
+                f"money {money}c exceeds tenant cap {gi.policy.money_hard_cap_cents}c — "
+                f"needs an owner, not a routine approval",
             )
         if gi.customer_is_vip and money > gi.policy.vip_cap_cents:
             return GateResult(
-                Decision.REQUIRE_APPROVAL,
+                Decision.ESCALATE,
                 f"VIP customer and money {money}c exceeds VIP cap {gi.policy.vip_cap_cents}c",
             )
-
-    irreversible = [a for a in gi.actions if a.tool_class == "MONEY" and not a.reversible]
-    if irreversible:
+        irreversible = [a for a in money_actions if not a.reversible]
+        if irreversible:
+            return GateResult(
+                Decision.ESCALATE, f"irreversible money action: {irreversible[0].tool}"
+            )
         return GateResult(
-            Decision.REQUIRE_APPROVAL,
-            f"irreversible money action: {irreversible[0].tool}",
+            Decision.REQUIRE_APPROVAL, f"money action ({money}c) always requires a human"
         )
 
     if gi.grounding_failed:
@@ -140,7 +153,8 @@ def decide(gi: GateInput) -> GateResult:
 
     # --- 3. Confidence bands.
     score = gi.confidence.score
-    all_read_only = all(a.tool_class in ("READ", "CONTROL") for a in gi.actions)
+    # CONTROL is not read-only: closing or reassigning a ticket mutates state.
+    all_read_only = all(a.tool_class == "READ" for a in gi.actions)
 
     if score >= AUTONOMOUS_THRESHOLD and all_read_only and gi.policy.allow_autonomous_reads:
         return GateResult(Decision.AUTONOMOUS, f"confidence {score:.2f}, read-only")

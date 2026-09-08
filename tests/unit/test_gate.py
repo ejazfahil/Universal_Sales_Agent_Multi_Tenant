@@ -44,14 +44,15 @@ def test_weak_confidence_escalates_rather_than_rubber_stamping() -> None:
 
 @pytest.mark.parametrize("amount", [1, 100, 8900, 50_000])
 def test_any_money_is_gated_under_default_policy(amount: int) -> None:
-    """★ Invariant I1. Default cap is zero: money is never autonomous."""
+    """★ Invariant I1. Under the default cap of zero, money escalates."""
     r = decide(
         GateInput(
             confidence=CONFIDENT,
             actions=[PlannedAction("commerce.refund", "MONEY", amount_cents=amount)],
         )
     )
-    assert r.decision is Decision.REQUIRE_APPROVAL
+    assert r.decision is Decision.ESCALATE
+    assert not r.may_execute
 
 
 def test_money_within_cap_still_not_autonomous_without_a_trusted_rule() -> None:
@@ -59,10 +60,11 @@ def test_money_within_cap_still_not_autonomous_without_a_trusted_rule() -> None:
         GateInput(
             confidence=CONFIDENT,
             actions=[PlannedAction("commerce.refund", "MONEY", amount_cents=500)],
-            policy=GatePolicy(money_hard_cap_cents=1000),
+            policy=GatePolicy(money_hard_cap_cents=1000, vip_cap_cents=1000),
         )
     )
     assert r.decision is Decision.REQUIRE_APPROVAL
+    assert "always requires a human" in r.reason
 
 
 def test_irreversible_money_always_gated() -> None:
@@ -70,10 +72,12 @@ def test_irreversible_money_always_gated() -> None:
         GateInput(
             confidence=CONFIDENT,
             actions=[PlannedAction("commerce.wire", "MONEY", amount_cents=100, reversible=False)],
-            policy=GatePolicy(money_hard_cap_cents=100_000),
+            policy=GatePolicy(money_hard_cap_cents=100_000, vip_cap_cents=100_000),
         )
     )
-    assert r.decision is Decision.REQUIRE_APPROVAL
+    # Escalated rather than routinely approved: an irreversible payment is not
+    # something to hand to whoever is on the queue.
+    assert r.decision is Decision.ESCALATE
     assert "irreversible" in r.reason
 
 
@@ -86,7 +90,7 @@ def test_vip_cap_is_enforced() -> None:
             customer_is_vip=True,
         )
     )
-    assert r.decision is Decision.REQUIRE_APPROVAL
+    assert r.decision is Decision.ESCALATE
     assert "VIP" in r.reason
 
 
@@ -136,7 +140,81 @@ def test_trusted_rule_cannot_unlock_money() -> None:
             rule=rule,
         )
     )
-    assert r.decision is Decision.REQUIRE_APPROVAL
+    assert r.decision is not Decision.AUTONOMOUS
+
+
+def test_small_reversible_refund_under_cap_is_still_gated() -> None:
+    """★ REGRESSION. This case executed unattended before 2026-09-08.
+
+    A €5 reversible refund, under a non-zero tenant cap, with a promoted rule,
+    fell past the money check and hit the trusted-rule branch. The original
+    version of test_trusted_rule_cannot_unlock_money missed it because it used
+    €999 against the default cap of 0 — it passed for the wrong reason, which is
+    precisely the failure mode this repo claims to guard against.
+    """
+    r = decide(
+        GateInput(
+            confidence=CONFIDENT,
+            actions=[PlannedAction("commerce.refund", "MONEY", amount_cents=500, reversible=True)],
+            policy=GatePolicy(money_hard_cap_cents=1000),
+            rule=PromotedRule(name="small-refunds", confidence=0.99, successes=50),
+        )
+    )
+    assert r.decision is not Decision.AUTONOMOUS
+    assert not r.may_execute
+
+
+@pytest.mark.parametrize("amount", [1, 99, 500, 999, 1_000, 1_001, 50_000])
+@pytest.mark.parametrize("cap", [0, 500, 1_000, 100_000])
+@pytest.mark.parametrize("reversible", [True, False])
+@pytest.mark.parametrize("trusted", [True, False])
+def test_no_money_amount_is_ever_autonomous(
+    amount: int, cap: int, reversible: bool, trusted: bool
+) -> None:
+    """★ The structural claim, swept rather than sampled.
+
+    112 combinations of amount, tenant cap, reversibility and rule trust. If any
+    of them returns AUTONOMOUS, invariant I1 is false. Sweeping matters here:
+    the original bug lived in a corner a single hand-picked case missed.
+    """
+    r = decide(
+        GateInput(
+            confidence=Confidence(1.0, 1.0, 1.0, 0.0),
+            actions=[
+                PlannedAction(
+                    "commerce.refund", "MONEY", amount_cents=amount, reversible=reversible
+                )
+            ],
+            policy=GatePolicy(money_hard_cap_cents=cap, vip_cap_cents=cap),
+            rule=PromotedRule(name="r", confidence=1.0, successes=999) if trusted else None,
+        )
+    )
+    assert r.decision is not Decision.AUTONOMOUS, (
+        f"money became autonomous: amount={amount} cap={cap} "
+        f"reversible={reversible} trusted={trusted}"
+    )
+
+
+def test_control_actions_are_not_treated_as_read_only() -> None:
+    """CONTROL mutates state — closing or reassigning a ticket is not a read."""
+    r = decide(
+        GateInput(
+            confidence=CONFIDENT,
+            actions=[PlannedAction("workflow.close_ticket", "CONTROL")],
+        )
+    )
+    assert r.decision is not Decision.AUTONOMOUS
+
+
+def test_read_only_still_runs_unattended() -> None:
+    """The tightening must not gate ordinary read-only work."""
+    r = decide(
+        GateInput(
+            confidence=CONFIDENT,
+            actions=[PlannedAction("commerce.lookup_order", "READ")],
+        )
+    )
+    assert r.decision is Decision.AUTONOMOUS
 
 
 @pytest.mark.parametrize(
