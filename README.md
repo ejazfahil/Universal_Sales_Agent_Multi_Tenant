@@ -5,7 +5,7 @@
 ### An AI customer-support agent that a European privacy officer can actually sign off on
 
 [![CI](https://github.com/ejazfahil/Universal_Sales_Agent_Multi_Tenant/actions/workflows/ci.yml/badge.svg)](https://github.com/ejazfahil/Universal_Sales_Agent_Multi_Tenant/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/tests-222%20passing-16A34A)
+![Tests](https://img.shields.io/badge/tests-337%20passing-16A34A)
 ![Type safety](https://img.shields.io/badge/mypy--strict-clean-2563EB)
 ![Python](https://img.shields.io/badge/python-3.12+-3776AB)
 ![EU AI Act](https://img.shields.io/badge/EU%20AI%20Act-limited%20risk%20by%20design-D94A1E)
@@ -20,9 +20,9 @@ Every decision is written to a log the database itself refuses to edit.**
 
 <div align="center">
 
-| 222 | 4 | 10 | 0 |
+| 337 | 3 | 10 | 0 |
 |:---:|:---:|:---:|:---:|
-| **tests passing** | **guarantees enforced<br/>by the database** | **EU languages<br/>supported** | **raw identifiers<br/>leaving the EEA** |
+| **tests passing** | **invariants enforced<br/>in the schema or CI** | **EU languages<br/>supported** | **raw identifiers in<br/>the outbound payload** |
 
 </div>
 
@@ -69,7 +69,7 @@ This project is an answer to those three questions, built as working software.
 <tr>
 <td><b>What do we show the regulator?</b></td>
 <td>A CSV export, if someone remembered to log it.</td>
-<td>Every decision is written to a log that <b>cannot be edited or deleted by anyone</b>, including a database administrator.</td>
+<td>Every decision is written to an append-only log. UPDATE and DELETE are revoked and a trigger blocks them — for any role. A determined superuser can still disable the trigger, so the honest word is <b>tamper-evident, not tamper-proof</b>; hash-chaining and external anchoring are M2.</td>
 </tr>
 </table>
 
@@ -84,26 +84,43 @@ timeline
              : Two-year runway begins
     Feb 2025 : Banned practices prohibited
     Aug 2025 : Rules for general-purpose AI models
-    Aug 2026 : ⚡ ENFORCEMENT BEGINS
-             : Transparency duties apply (Art. 50)
-             : Regulators gain full powers
+    Aug 2026 : Art. 50 transparency applies
+             : Art. 50(1) chatbot disclosure — no grace period
              : Fines up to €15M or 3% of turnover
-    Dec 2026 : ⏳ Grace period ends
-             : Chatbots running before Aug 2026 must comply
-    2027     : Steady-state supervision
+    Dec 2026 : Art. 50(2) AI-content marking
+             : grace period ends for pre-Aug systems
+    Dec 2027 : Annex III high-risk regime
+             : deferred here by Reg (EU) 2026/1744
 ```
 
-Enforcement began on **2 August 2026**. Every AI chatbot serving European customers must now tell people they're talking to a machine. Businesses that had one running before August have until **2 December 2026**.
+**Precision matters here, and an earlier version of this README was imprecise.**
 
-Most AI support tools were built in America for American companies. They're now scrambling to answer European questions. This one starts from those questions.
+- **Art. 50(1)** — telling people they are talking to a machine — applies from **2 August 2026** with **no grace period**.
+- **Art. 50(2)** — machine-readable marking of AI-generated content — has a grace period to **2 December 2026** for systems placed on the market before August.
+- The **Annex III high-risk regime** was **deferred to 2 December 2027** by Regulation (EU) 2026/1744 (in force 27 July 2026). It did *not* bite in August.
+- **Art. 5 prohibitions** have applied since February 2025 and were not deferred.
+
+Fines reach €15M or 3% of worldwide turnover, with lower ceilings for SMEs.
+
+*Regulatory summaries here are engineering notes, not legal advice. Verify against [Regulation (EU) 2024/1689](https://eur-lex.europa.eu/eli/reg/2024/1689/oj) and its amendments before relying on any of it.*
 
 ---
 
 ## 🔑 The core idea, in one picture
 
-The single hardest constraint: **you cannot run a frontier AI model inside Europe.** Anthropic, OpenAI and Google all process in the US. I verified this rather than assumed it — Anthropic's data-residency setting accepts only `us` or `global`. There is no EU option.
+**A correction, because an earlier version of this README got it wrong.** I originally claimed you cannot run a frontier model inside the EU. That is false, and a reviewer rightly called it out.
 
-So instead of pretending otherwise, this system makes the data meaningless before it travels:
+You *can*. Claude runs on AWS Bedrock in eu-central-1 (Frankfurt), eu-west-1, eu-west-3 and eu-north-1, and on Vertex AI EU regions. OpenAI offers European data residency with in-region processing. Azure has EU Data Zones. Mistral is EU-native.
+
+What is actually true is narrower: **Anthropic's first-party API has no EU inference region** — its `inference_geo` parameter accepts `us` or `global`, with no EU value. The EU paths run through Bedrock or Vertex, which change who your processor is, constrain model and feature availability, and tie you to one cloud.
+
+So the honest framing is not "the EU is impossible". It is:
+
+> The guarantee should not depend on a vendor's region list.
+
+Regions get added and removed. Adequacy decisions get challenged — the EU-US Data Privacy Framework survived *Latombe* at the General Court in September 2025, but the appeal is pending at the CJEU. A design that is only compliant while a particular region exists and a particular adequacy decision holds is a design with a dependency it does not control.
+
+This system is built to be safe **even when inference sits outside the region**. Run it on Bedrock Frankfurt and the gateway is redundant — that is the point, not a flaw. It buys provider portability and a Schrems III hedge, and it costs one component.
 
 ```mermaid
 flowchart LR
@@ -183,8 +200,19 @@ sequenceDiagram
 |:-:|---|---|---|
 | 1 | **Personal data never leaves the EEA** | Tokenised before egress, verified on the serialized request body | Not without re-architecting — a contract amendment can't do it |
 | 2 | **No money moves without a human** | A database `CHECK` constraint rejects the row | Easy to copy, rarely done |
-| 3 | **The audit log cannot be rewritten** | Permissions revoked *and* a trigger that blocks even an administrator | Easy to copy, almost never done |
+| 3 | **The audit log is tamper-evident** | Permissions revoked *and* a trigger blocking every role. Not tamper-*proof* — see caveat below | Easy to copy, almost never done |
 | 4 | **No emotion detection, deliberately** | Automated check fails the build if it appears in code | Hard — competitors already shipped it |
+
+> **Caveat on guarantee 3, because the earlier wording overclaimed.**
+> `REVOKE UPDATE, DELETE` plus a trigger stops the application and constrains a
+> superuser in normal operation — grants alone would not. But a determined
+> superuser can `ALTER TABLE audit_logs DISABLE TRIGGER ALL`, or set
+> `session_replication_role = replica`, edit, and re-enable. This repo's own
+> test teardown uses that escape hatch, which is proof enough it exists.
+> Dump-and-restore defeats it too. **Tamper-evident, not tamper-proof.** Making
+> it resistant means hash-chaining each record to its predecessor and anchoring
+> the chain where the DBA has no write access — S3 Object Lock in compliance
+> mode, EU region, separate account. That is M2 and it is not built.
 
 ### Why guarantee 4 is a feature, not a gap
 
@@ -208,7 +236,15 @@ flowchart TD
     style OUT2 fill:#16A34A,color:#fff
 ```
 
-Most AI support tools detect whether a customer sounds angry. It demos well. Since August 2026 it is also, under EU law, a **high-risk AI system**. This system reaches the same routing decision from facts instead — and a competitor who already ships sentiment analysis cannot simply remove it, because for them that's a feature regression.
+Most AI support tools detect whether a customer sounds angry. It demos well. The legal position, stated precisely:
+
+- Emotion recognition in the **workplace and education is prohibited** under Art. 5(1)(f), and has been since February 2025.
+- Elsewhere it is **Annex III high-risk** — but that regime was **deferred to 2 December 2027**, so it did not bite in August 2026.
+- What *did* apply on 2 August 2026 is **Art. 50(3)**: a duty to inform people exposed to emotion recognition.
+
+So the design choice stands, but the deadline pressure I originally attached to it does not. The reason to avoid it is that it puts you in a regime arriving in December 2027 with conformity assessment, CE marking and registration attached — not that it became illegal last month.
+
+This system reaches the same routing decision from facts instead, and a competitor already shipping sentiment analysis cannot simply remove it, because for them that is a feature regression.
 
 ---
 
@@ -389,12 +425,16 @@ erDiagram
 Two invariants live in the schema rather than in application code, because **a constraint the database refuses to violate is worth more than a code path someone can forget**:
 
 ```sql
--- No refund record can exist without a human approval attached.
+-- No refund record can exist without an approval referenced.
 CHECK (tool_class <> 'MONEY' OR approval_id IS NOT NULL)
 
 -- Urgency is a fixed vocabulary. There is deliberately no sentiment column.
 CHECK (urgency IN ('low', 'normal', 'high', 'urgent'))
 ```
+
+**What that constraint does not prove.** A CHECK cannot reference another table, so this establishes only that a MONEY row *points at* an approval. It does not prove the decision was `approve` rather than `deny`, that the approval belongs to this run and this amount, that the approver is not the requester, or that one approval was not reused across several actions. Those need a composite foreign key plus a trigger — M1.
+
+And a database constraint gates the *record*, not the payment. Money moves on an HTTP call. The constraint is only the control if the row is written in the same transaction that enqueues the call, via an outbox. That is the design, and it is not built yet.
 
 ---
 
@@ -530,14 +570,14 @@ Nothing below is aspirational. Each row is a test that runs on every push.
 | No emotion detection anywhere | Build fails if it appears in code | `check_no_emotion_inference.py` |
 | …and tone genuinely doesn't affect routing | Identical facts + opposite tone → identical urgency | `test_urgency.py` |
 
-### Where the 209 tests are
+### Where the 337 tests are
 
 ```mermaid
 pie showData
     title Tests by area
+    "Decision gate (incl. money sweep)" : 138
     "Prompt injection (eval)" : 73
     "Pseudonymisation / PII" : 58
-    "Decision gate" : 23
     "API, RBAC, disclosure" : 23
     "Deterministic urgency" : 13
     "Config & residency" : 11
@@ -550,8 +590,8 @@ pie showData
 The two largest groups are **adversarial** — injection attempts and PII leak attempts. That distribution is deliberate: those are the tests that would let real harm through.
 
 ```
-222 tests                          ✅ passing
-  ├─ 139 unit
+337 tests                          ✅ passing
+  ├─ 254 unit
   ├─  73 eval (adversarial)
   └─  10 integration (real Postgres, asserted not-skipped in CI)
 
@@ -600,13 +640,11 @@ These are the difference between "it works" and "it's verified":
 
 Real token usage is recorded per conversation — never estimated from text length, which is how a "cost per resolution" figure becomes fiction.
 
-```mermaid
-xychart-beta
-    title "Published price per resolution — competitors (USD)"
-    x-axis ["Gorgias (annual)", "Fin", "Decagon", "Gorgias (overage)"]
-    y-axis "USD per resolution" 0 --> 1.6
-    bar [0.90, 0.99, 0.99, 1.50]
-```
+> **No pricing comparison here.** An earlier version charted competitor
+> per-resolution prices next to this project. That was misleading: I have no
+> measured cost-per-resolution of my own to compare against, because nothing has
+> run against the real model at volume. The chart implied a benchmark that does
+> not exist.
 
 | Model | Input / 1M tokens | Output / 1M tokens | Used for |
 |---|--:|--:|---|
@@ -618,26 +656,23 @@ Competitors cluster at **$0.90–$1.00 per resolution**, with overage at $1.50. 
 
 ---
 
-## 🎯 Where this sits in the market
+## 📏 What has and hasn't been measured
 
-```mermaid
-quadrantChart
-    title Compliance depth vs product breadth
-    x-axis "Narrow product" --> "Broad product"
-    y-axis "Compliance as paperwork" --> "Compliance as architecture"
-    quadrant-1 "Mature + compliant"
-    quadrant-2 "Compliance-first (us)"
-    quadrant-3 "Early / niche"
-    quadrant-4 "Feature-rich, US-first"
-    "This project (M0)": [0.18, 0.88]
-    "Intercom Fin": [0.88, 0.30]
-    "Gorgias": [0.72, 0.22]
-    "Decagon": [0.70, 0.35]
-    "Zendesk AI": [0.92, 0.25]
-    "Sierra": [0.78, 0.40]
-```
+This matters more than any positioning chart, so it gets its own section.
 
-An honest placement. This project is **narrow** — one workflow, read-only — and deliberately deep on compliance. The incumbents are the reverse. The bet is that a December deadline makes the vertical axis matter more than it did in 2025, and that moving up it requires re-architecture rather than a contract amendment.
+**Measured:** 337 tests pass. Tenant isolation holds with the filter removed, verified as a non-superuser. A MONEY action cannot reach AUTONOMOUS across a 112-combination sweep. 50 PII-bearing messages leave no raw identifier in the serialized payload. 30 injection attempts unlock nothing.
+
+**Not measured — and therefore not claimed:**
+
+| | Why |
+|---|---|
+| Auto-resolution rate | Nothing has run against the real model at volume |
+| Cost per resolution | The demo uses a deterministic stand-in; `cost_cents` is 0 |
+| p95 latency | Same |
+| False-autonomy rate at the 0.95 threshold | The four scores are not calibrated probabilities. "0.95" is a label, not a confidence. |
+| PII recall on free text | The 58 PII tests are pass/fail cases, not recall on a held-out corpus. Name detection leans on a roster of known values. Benchmarking against Presidio and a NER baseline is the next task. |
+
+An earlier version of this README placed the project on a competitive quadrant against Intercom Fin and Sierra. With none of the numbers above, that was not a defensible thing to draw. It has been removed.
 
 ---
 
@@ -648,7 +683,7 @@ git clone https://github.com/ejazfahil/Universal_Sales_Agent_Multi_Tenant.git
 cd Universal_Sales_Agent_Multi_Tenant
 
 uv sync --all-groups          # install (uv is a fast Python package manager)
-uv run pytest -q              # 212 tests — no database, no API key needed
+uv run pytest -q              # 327 tests — no database, no API key needed
 uv run uvicorn app.main:app --reload
 ```
 
@@ -665,7 +700,7 @@ With a database, which adds the isolation and immutability tests:
 ```bash
 docker compose up -d
 uv run alembic upgrade head
-uv run pytest -q              # now 222
+uv run pytest -q              # now 337
 ```
 
 ---
@@ -793,6 +828,33 @@ A project that only lists strengths isn't an engineering document.
 - **No identity graph, and I wouldn't build one.** Competitors have a decade of that infrastructure. Integrating with Shopify Customer Accounts is the right call.
 - **The compliance advantage has a shelf life.** Competitors will stand up EU regions eventually. Realistically 12–18 months, after which the learning loop has to hold the account.
 - **The core support agent is commodity.** Roughly 70% of this is table stakes. The defensible part is the compliance substrate — and I'd rather say that plainly than oversell it.
+- **The token vault is itself personal data.** It is the re-identification key, so it needs retention limits, rotation and erasure propagation. Currently in-memory per request. M1.
+- **No DPIA, no Art. 30 record, no Art. 22 analysis.** A DPIA is likely mandatory for this processing. Not done.
+- **RLS has a production trap I have not hit yet.** `SET LOCAL app.tenant_id` with PgBouncer in transaction-pooling mode is where this silently breaks. Also: pgvector embeddings of customer text are derived personal data, and a shared index is a cross-tenant surface.
+- **No aggregate or velocity cap on money.** Ten separate €40 refunds are ten separate decisions. Per-action gating does not bound daily exposure.
+- **`amount_cents` carries no currency.** For a multi-country EU product that is a bug waiting to happen.
+
+---
+
+## 🔧 Corrections
+
+This README previously contained claims that did not survive review. They are
+listed here rather than quietly edited, because a project about auditability
+should keep its own audit trail.
+
+| Claim | Status | Now |
+|---|---|---|
+| "You cannot run a frontier AI model inside the EU" | **False** | Claude is on Bedrock eu-central-1 and Vertex EU; OpenAI has EU residency. Corrected to: Anthropic's *first-party* API has no EU region, and the guarantee should not depend on a vendor's region list. |
+| "Chatbots running before Aug 2026 must comply by 2 Dec" | **False** | The Art. 50(2) grace period covers AI-content *marking*. Art. 50(1) chatbot disclosure had no grace period. |
+| "Emotion detection became high-risk in August 2026" | **False** | Annex III was deferred to 2 Dec 2027 by Reg (EU) 2026/1744. Workplace/education emotion recognition is *prohibited* under Art. 5(1)(f) since Feb 2025. Art. 50(3) is what applied in August. |
+| "The audit log cannot be edited by anyone" | **False** | A superuser can disable the trigger. Tamper-evident, not tamper-proof. |
+| "Money is permanently gated, no path out" | **Was false, now true** | A reversible refund under a non-zero cap with a promoted rule executed unattended. Fixed structurally; 112-combination sweep added. |
+| Competitor pricing chart, market quadrant | **Unsupported** | Removed. No measured cost-per-resolution exists to compare against. |
+| Test count | **Inconsistent** | Was 209/212/222 in different places. Now 337 everywhere, from a collection run. |
+
+Found by an external reviewer. The money-path bug was the most serious: the
+invariant held only because a default happened to be zero, and the test meant to
+catch it passed for the wrong reason.
 
 ---
 
