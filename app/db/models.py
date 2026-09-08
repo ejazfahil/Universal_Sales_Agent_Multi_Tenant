@@ -275,7 +275,11 @@ class Action(Base):
         # authorises it. Migration 0005 adds the cross-table rules a CHECK
         # cannot express — separation of duties and amount coverage.
         CheckConstraint(
-            "tool_class <> 'MONEY' OR approval_decision IN ('approve', 'edit')",
+            # NULL IN (...) is NULL, and CHECK passes on NULL — only FALSE
+            # fails it. The IS NOT NULL guard is what stops a MONEY action with
+            # no approval from being accepted.
+            "tool_class <> 'MONEY' OR (approval_decision IS NOT NULL "
+            "AND approval_decision IN ('approve', 'edit'))",
             name="ck_money_requires_approving_decision",
         ),
         CheckConstraint(

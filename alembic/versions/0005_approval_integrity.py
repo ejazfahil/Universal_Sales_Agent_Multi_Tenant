@@ -78,7 +78,11 @@ def upgrade() -> None:
     op.create_check_constraint(
         "ck_money_requires_approving_decision",
         "actions",
-        "tool_class <> 'MONEY' OR approval_decision IN ('approve', 'edit')",
+        # NULL IN (...) evaluates to NULL, and a CHECK passes on NULL — it only
+        # fails on FALSE. Without the IS NOT NULL guard a MONEY action with no
+        # approval at all slips through. Caught by test in CI, not by review.
+        "tool_class <> 'MONEY' OR (approval_decision IS NOT NULL "
+        "AND approval_decision IN ('approve', 'edit'))",
     )
     # (2) The approval must belong to this action's own run.
     op.create_check_constraint(
