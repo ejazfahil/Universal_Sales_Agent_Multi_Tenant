@@ -40,7 +40,9 @@ def test_money_action_without_approval_is_rejected(
     """★ Invariant I1. Postgres refuses the INSERT."""
     tenant_a, _ = two_tenants
     with (
-        pytest.raises(sa.exc.IntegrityError, match="ck_money_action_requires_approval"),
+        # Renamed by migration 0005, which strengthened the constraint from
+        # "an approval is referenced" to "an approving decision is referenced".
+        pytest.raises(sa.exc.IntegrityError, match="ck_money_requires_approving_decision"),
         migrated.begin() as conn,
     ):
         scope_to_tenant(conn, tenant_a)
