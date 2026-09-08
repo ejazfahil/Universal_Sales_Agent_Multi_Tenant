@@ -23,10 +23,12 @@ from datetime import datetime
 from sqlalchemy import (
     CheckConstraint,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     Numeric,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -172,6 +174,11 @@ class AgentRun(Base):
     )
     model: Mapped[str] = mapped_column(nullable=False)
     status: Mapped[str] = mapped_column(nullable=False, default="running")
+    # Who asked for this run. Needed for separation of duties: the approver of a
+    # money action must not be the person who requested it.
+    requested_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
 
     # Confidence is min(retrieval, grounding, policy_match, 1 - novelty).
     # Components are stored, not just the composite: showing only a single
@@ -213,9 +220,16 @@ class Approval(Base):
     )
     edited_draft: Mapped[str | None] = mapped_column(Text, nullable=True)
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: The ceiling the human actually authorised. An action may not exceed it.
+    approved_amount_cents: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     decided_at: Mapped[datetime] = _created()
 
-    __table_args__ = (_in("decision", APPROVAL_DECISIONS),)
+    __table_args__ = (
+        _in("decision", APPROVAL_DECISIONS),
+        # Target of the composite FK from actions: carries the run and the
+        # decision so a CHECK on actions can constrain both.
+        UniqueConstraint("id", "agent_run_id", "decision", name="uq_approvals_id_run_decision"),
+    )
 
 
 class Action(Base):
@@ -233,9 +247,12 @@ class Action(Base):
     agent_run_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    approval_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("approvals.id", ondelete="RESTRICT"), nullable=True
-    )
+    #: These three travel together as a composite FK to
+    #: approvals(id, agent_run_id, decision), so the schema itself knows the
+    #: approval belongs to this run and that its decision authorises the action.
+    approval_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
+    approval_run_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
+    approval_decision: Mapped[str | None] = mapped_column(nullable=True)
     tool: Mapped[str] = mapped_column(nullable=False)
     tool_class: Mapped[str] = mapped_column(nullable=False)
     args: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
@@ -248,9 +265,22 @@ class Action(Base):
 
     __table_args__ = (
         _in("tool_class", TOOL_CLASSES),
+        ForeignKeyConstraint(
+            ["approval_id", "approval_run_id", "approval_decision"],
+            ["approvals.id", "approvals.agent_run_id", "approvals.decision"],
+            name="fk_actions_approval_composite",
+            ondelete="RESTRICT",
+        ),
+        # Invariant I1: a MONEY action needs an approval whose decision
+        # authorises it. Migration 0005 adds the cross-table rules a CHECK
+        # cannot express — separation of duties and amount coverage.
         CheckConstraint(
-            "tool_class <> 'MONEY' OR approval_id IS NOT NULL",
-            name="ck_money_action_requires_approval",
+            "tool_class <> 'MONEY' OR approval_decision IN ('approve', 'edit')",
+            name="ck_money_requires_approving_decision",
+        ),
+        CheckConstraint(
+            "approval_id IS NULL OR approval_run_id = agent_run_id",
+            name="ck_approval_matches_run",
         ),
     )
 
